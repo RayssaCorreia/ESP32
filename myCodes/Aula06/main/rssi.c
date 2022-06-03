@@ -31,6 +31,8 @@
 
 #include "freertos/event_groups.h"
 
+#include "driver/adc.h"
+
 static const char *TAG = "MQTT_EXAMPLE";
 
 typedef struct receive {
@@ -39,8 +41,11 @@ typedef struct receive {
 } rcv_t;
 
 // WiFi network info.
-char ssid[] = "dilson";
-char wifiPassword[] = "Cl@udionor";
+//  char ssid[] = "PADOLABS";
+//  char wifiPassword[] = "P@d0l@bs";
+
+char ssid[] = "PADOTEC";
+char wifiPassword[] = "P@d0t3c2021";
 
 // Cayenne authentication info. This should be obtained from the Cayenne Dashboard.
 #define BROKER "mqtt://mqtt.mydevices.com"
@@ -56,6 +61,7 @@ char wifiPassword[] = "Cl@udionor";
 
 #define RSSI_CH "1"
 #define MEM_CH "2"
+#define POT_CH "5"
 
 #define RSSI_TOPIC MAIN_TOPIC "/data/" RSSI_CH
 #define RSSI_MSG_PREFIX "rssi,dbm="
@@ -63,12 +69,17 @@ char wifiPassword[] = "Cl@udionor";
 #define MEM_TOPIC MAIN_TOPIC "/data/" MEM_CH
 #define MEM_MSG_PREFIX "storage,byte="
 
+#define BAT_TOPIC MAIN_TOPIC "/data/" POT_CH
+#define BAT_MSG_PREFIX "batt,p="
+
 #define WIFI_CONNECTED_BIT BIT0
 #define MQTT_CONNECTED_BIT BIT1
 
 EventGroupHandle_t events;
 esp_mqtt_client_handle_t client;
 TaskHandle_t send_handle;
+
+QueueHandle_t ValorPot;
 
 static void log_error_if_nonzero(const char * message, int errorCode)
 {
@@ -149,14 +160,24 @@ void send_task(void *param)
 {
     wifi_ap_record_t ap_info;
     char message[20] = {0};
+    int pot;
+    
     while(1)
     {        
         
         EventBits_t bits = xEventGroupWaitBits(events, MQTT_CONNECTED_BIT,
                     pdFALSE, pdFALSE, 0);
+
+        xQueueReceive(ValorPot, &pot, portMAX_DELAY);
+
         // ver se está conectado ou não            
         if(bits & MQTT_CONNECTED_BIT) 
         {   
+            sprintf(message, BAT_MSG_PREFIX"%d",pot);
+            int msg_id = esp_mqtt_client_publish(client, BAT_TOPIC, message, strlen(message), 1, 0);
+            ESP_LOGW(TAG, "msg_id=%d | sending %.*s", msg_id, strlen(message),message);
+
+
             //pegando informações do ap
             if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK)
             {   //montando a mensagem de
@@ -170,11 +191,24 @@ void send_task(void *param)
             // enviando a memoria livre
             memset(message, 0, sizeof(message));
             sprintf(message, MEM_MSG_PREFIX"%d", esp_get_free_heap_size());
-            int msg_id = esp_mqtt_client_publish(client, MEM_TOPIC, message, strlen(message), 1, 0);
+            msg_id = esp_mqtt_client_publish(client, MEM_TOPIC, message, strlen(message), 1, 0);
             ESP_LOGW(TAG, "msg_id=%d | sending %.*s", msg_id, strlen(message),message);
+
+        
         }
         
         vTaskDelay(pdMS_TO_TICKS(15000));
+    }
+}
+
+void Vpot_task(){
+
+    while(1){
+    int val = adc1_get_raw(ADC1_CHANNEL_6);
+    printf("value is %d\n", val);
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    xQueueSend(ValorPot, &val, 0);
+
     }
 }
 
@@ -190,6 +224,9 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
+    adc1_config_width(ADC_WIDTH_12Bit);
+    adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_11db);
+
     /* This helper function configures Wi-Fi or Ethernet, as selected in menuconfig.
      * Read "Establishing Wi-Fi or Ethernet Connection" section in
      * examples/protocols/README.md for more information about this function.
@@ -200,8 +237,12 @@ void app_main(void)
     // events bits
     events = xEventGroupCreate();
 
+    //cria fila
+    ValorPot = xQueueCreate(3, sizeof(int));
+
     //criando tarefa de envio
     xTaskCreate(send_task, "send_task", 2048, NULL, 12, &send_handle);
+    xTaskCreate(Vpot_task, "pot_task", 2048, NULL, 12, NULL);
 
     mqtt_app_start();
 }

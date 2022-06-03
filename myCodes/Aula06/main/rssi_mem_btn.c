@@ -43,8 +43,8 @@ typedef struct receive {
 } rcv_t;
 
 // WiFi network info.
-char ssid[] = "dilson";
-char wifiPassword[] = "Cl@udionor";
+char ssid[] = "PADOLABS";
+char wifiPassword[] = "P@d0l@bs";
 
 // Cayenne authentication info. This should be obtained from the Cayenne Dashboard.
 #define BROKER "mqtt://mqtt.mydevices.com"
@@ -237,6 +237,7 @@ void app_main(void)
 
     gpio_pad_select_gpio(PIN_LED);
     gpio_set_direction(PIN_LED, GPIO_MODE_OUTPUT);
+
     /* This helper function configures Wi-Fi or Ethernet, as selected in menuconfig.
      * Read "Establishing Wi-Fi or Ethernet Connection" section in
      * examples/protocols/README.md for more information about this function.
