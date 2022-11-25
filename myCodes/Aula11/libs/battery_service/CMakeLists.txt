@@ -1,0 +1,6 @@
+set(COMPONENT_SRCDIRS ".")
+set(COMPONENT_ADD_INCLUDEDIRS ".")
+set(COMPONENT_REQUIRES bt)
+set(COMPONENT_PRIV_REQUIRES )
+
+register_component()
